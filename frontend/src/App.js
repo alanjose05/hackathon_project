@@ -23,45 +23,42 @@ L.Icon.Default.mergeOptions({
 const Asteroid3D = ({ diameter, position, color, name }) => {
   const meshRef = React.useRef();
   
-  React.useEffect(() => {
+  // Simple rotation animation
+  React.useFrame((state, delta) => {
     if (meshRef.current) {
-      meshRef.current.rotation.x += 0.01;
-      meshRef.current.rotation.y += 0.01;
+      meshRef.current.rotation.y += delta * 0.5;
     }
   });
 
-  const radius = Math.max(diameter / 1000, 0.1); // Convert to reasonable 3D size
+  const radius = Math.log(diameter + 1) * 0.1; // Logarithmic scale for better visualization
   
   return (
     <group position={position}>
-      <Sphere
-        ref={meshRef}
-        args={[radius, 32, 32]}
-        position={[0, 0, 0]}
-      >
+      <mesh ref={meshRef}>
+        <sphereGeometry args={[radius, 16, 16]} />
         <meshStandardMaterial 
           color={color}
           roughness={0.8}
           metalness={0.2}
         />
-      </Sphere>
+      </mesh>
       <Text
-        position={[0, radius + 0.3, 0]}
-        fontSize={0.2}
+        position={[0, radius + 0.2, 0]}
+        fontSize={0.15}
         color="white"
         anchorX="center"
         anchorY="middle"
       >
-        {name}
+        {name?.substring(1, name.length-1) || 'Unknown'}
       </Text>
       <Text
-        position={[0, -radius - 0.3, 0]}
-        fontSize={0.15}
-        color="gray"
+        position={[0, -radius - 0.2, 0]}
+        fontSize={0.1}
+        color="#888888"
         anchorX="center"
         anchorY="middle"
       >
-        Ø {diameter.toFixed(0)}m
+        {diameter?.toFixed(0) || '0'}m
       </Text>
     </group>
   );
