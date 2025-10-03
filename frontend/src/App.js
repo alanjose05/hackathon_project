@@ -3,7 +3,8 @@ import axios from 'axios';
 import './App.css';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Sphere, Text, Box } from '@react-three/drei';
+import { OrbitControls, Text } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import 'leaflet/dist/leaflet.css';
 
