@@ -102,28 +102,30 @@ const AsteroidViewer3D = ({ asteroids }) => {
           ))}
           
           {/* Reference objects for size comparison */}
-          <Box position={[-6, 0, 0]} args={[0.1, 0.1, 0.1]}>
+          <mesh position={[-4, 0, 0]}>
+            <boxGeometry args={[0.05, 0.05, 0.05]} />
             <meshStandardMaterial color="#60a5fa" />
-          </Box>
+          </mesh>
           <Text
-            position={[-6, -0.3, 0]}
-            fontSize={0.12}
+            position={[-4, -0.2, 0]}
+            fontSize={0.1}
             color="cyan"
             anchorX="center"
           >
-            Human (1.8m)
+            Human
           </Text>
           
-          <Box position={[-6, 2, 0]} args={[0.4, 0.4, 0.4]}>
+          <mesh position={[-4, 2, 0]}>
+            <boxGeometry args={[0.2, 0.2, 0.2]} />
             <meshStandardMaterial color="#fbbf24" />
-          </Box>
+          </mesh>
           <Text
-            position={[-6, 1.4, 0]}
-            fontSize={0.12}
+            position={[-4, 1.6, 0]}
+            fontSize={0.1}
             color="yellow"
             anchorX="center"
           >
-            Building (40m)
+            Building
           </Text>
         </Suspense>
       </Canvas>
