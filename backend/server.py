@@ -113,7 +113,7 @@ def parse_from_mongo(item):
 def calculate_risk_level(asteroid_data: dict) -> RiskLevel:
     """Calculate risk level based on asteroid properties"""
     is_hazardous = asteroid_data.get('is_potentially_hazardous_asteroid', False)
-    diameter_km = asteroid_data.get('estimated_diameter', {}).get('kilometers', {}).get('estimated_diameter_max', 0)
+    diameter_km = asteroid_data.get('estimated_diameter', {}).get('kilometers_max', 0)
     
     # Get closest approach distance
     min_distance = float('inf')
