@@ -703,10 +703,21 @@ const Dashboard = () => {
           </select>
         </div>
 
+        {/* Solar System Map - Full Width */}
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">🌌 Solar System Orbital Map</h2>
+          <p className="text-gray-600 mb-4">
+            Interactive 3D solar system showing real asteroid orbital positions around the Sun
+          </p>
+          <Suspense fallback={<div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">Loading Solar System...</div>}>
+            <SolarSystemMap asteroids={asteroids} />
+          </Suspense>
+        </div>
+
         {/* Interactive Visualizations */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">🗺️ Trajectory Map</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">🗺️ Earth Trajectory Map</h2>
             <p className="text-gray-600 mb-4">
               Interactive map showing asteroid approach paths and impact scenarios
             </p>
