@@ -1,0 +1,94 @@
+{
+  "summary": {
+    "passed": 8,
+    "failed": 1,
+    "success_rate": 88.88888888888889,
+    "timestamp": "2025-10-03T19:31:14.191747"
+  },
+  "detailed_results": [
+    {
+      "test": "API Health Check",
+      "success": true,
+      "message": "API is active: Asteroid Risk Visualization API",
+      "timestamp": "2025-10-03T19:31:04.362974",
+      "details": null
+    },
+    {
+      "test": "NASA API Integration",
+      "success": true,
+      "message": "Successfully fetched and processed 71 asteroids",
+      "timestamp": "2025-10-03T19:31:06.047822",
+      "details": {
+        "message": "Successfully processed 71 asteroids",
+        "total_count": 71,
+        "date_range": "2025-10-03 to 2025-10-06"
+      }
+    },
+    {
+      "test": "Asteroid Data Retrieval",
+      "success": true,
+      "message": "Retrieved 10 asteroids with complete data structure",
+      "timestamp": "2025-10-03T19:31:07.055763",
+      "details": null
+    },
+    {
+      "test": "Specific Asteroid Lookup",
+      "success": true,
+      "message": "Successfully retrieved asteroid: (2008 SS)",
+      "timestamp": "2025-10-03T19:31:08.064948",
+      "details": null
+    },
+    {
+      "test": "Risk Level Filtering",
+      "success": true,
+      "message": "All risk level filters working correctly",
+      "timestamp": "2025-10-03T19:31:09.144715",
+      "details": null
+    },
+    {
+      "test": "Dashboard Statistics",
+      "success": true,
+      "message": "Statistics retrieved: 121 total asteroids, 4 hazardous",
+      "timestamp": "2025-10-03T19:31:10.154397",
+      "details": {
+        "total_asteroids": 121,
+        "hazardous_asteroids": 4,
+        "critical_risk_count": 0,
+        "high_risk_count": 1,
+        "total_scenarios": 0
+      }
+    },
+    {
+      "test": "Impact Scenario Creation",
+      "success": true,
+      "message": "Created scenario with 12.73km damage radius, 272.85 megatons energy",
+      "timestamp": "2025-10-03T19:31:11.174984",
+      "details": {
+        "id": "d4fdd19e-8969-4835-a824-979694f41bdd",
+        "asteroid_id": "3427459",
+        "impact_location": {
+          "lat": 40.7128,
+          "lng": -74.006
+        },
+        "estimated_damage_radius_km": 12.731712550024943,
+        "estimated_casualties": 50924,
+        "impact_energy_megatons": 272.8536609579717,
+        "created_at": "2025-10-03T19:31:11.160324Z"
+      }
+    },
+    {
+      "test": "Impact Scenario Retrieval",
+      "success": true,
+      "message": "Retrieved 1 impact scenarios with complete data",
+      "timestamp": "2025-10-03T19:31:12.182812",
+      "details": null
+    },
+    {
+      "test": "Risk Assessment Algorithm",
+      "success": false,
+      "message": "Risk assessment logic may be flawed. Distribution: {'low': 14, 'moderate': 6, 'high': 0, 'critical': 0}",
+      "timestamp": "2025-10-03T19:31:13.191476",
+      "details": null
+    }
+  ]
+}
