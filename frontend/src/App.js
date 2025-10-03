@@ -57,6 +57,171 @@ const Asteroid3D = ({ diameter, position, color, name }) => {
   );
 };
 
+// Solar System Map Component
+const SolarSystemMap = ({ asteroids }) => {
+  const sunRef = React.useRef();
+  
+  // Planet data for reference
+  const planets = [
+    { name: 'Mercury', distance: 0.39, color: '#8C7853', size: 0.038 },
+    { name: 'Venus', distance: 0.72, color: '#FFC649', size: 0.095 },
+    { name: 'Earth', distance: 1.0, color: '#6B93D6', size: 0.1 },
+    { name: 'Mars', distance: 1.52, color: '#C1440E', size: 0.053 }
+  ];
+
+  // Calculate asteroid orbital positions
+  const getAsteroidPosition = (asteroid, index) => {
+    // Estimate semi-major axis from close approach data (simplified)
+    const closeApproach = asteroid.close_approach_data?.[0];
+    if (!closeApproach) return [0, 0, 0];
+    
+    // Convert miss distance to approximate orbital distance
+    const missDistanceKm = parseFloat(closeApproach.miss_distance.kilometers.replace(/,/g, ''));
+    const distanceAU = Math.max(1.5, Math.min(4.0, missDistanceKm / 149597870.7 / 1000)); // Convert to AU, clamp between Mars and asteroid belt
+    
+    // Create orbital position
+    const angle = (index * 23) * (Math.PI / 180); // Spread asteroids around orbit
+    const x = Math.cos(angle) * distanceAU * 8; // Scale for visualization
+    const z = Math.sin(angle) * distanceAU * 8;
+    const y = (Math.random() - 0.5) * 2; // Some vertical variation
+    
+    return [x, y, z];
+  };
+
+  const getPlanetPosition = (planet, time = 0) => {
+    const angle = time * (2 - planet.distance * 0.5); // Different orbital speeds
+    const x = Math.cos(angle) * planet.distance * 8;
+    const z = Math.sin(angle) * planet.distance * 8;
+    return [x, 0, z];
+  };
+
+  const getRiskColor = (risk) => {
+    switch(risk) {
+      case 'critical': return '#dc2626';
+      case 'high': return '#ea580c';
+      case 'moderate': return '#ca8a04';
+      case 'low': return '#16a34a';
+      default: return '#6b7280';
+    }
+  };
+
+  return (
+    <div className="h-96 bg-black rounded-lg overflow-hidden relative">
+      <Canvas camera={{ position: [15, 10, 15], fov: 75 }}>
+        <ambientLight intensity={0.3} />
+        <pointLight position={[0, 0, 0]} intensity={2} color="#FDB813" />
+        <OrbitControls enableZoom={true} />
+        
+        <Suspense fallback={null}>
+          {/* Sun */}
+          <mesh ref={sunRef} position={[0, 0, 0]}>
+            <sphereGeometry args={[0.5, 32, 32]} />
+            <meshBasicMaterial color="#FDB813" />
+          </mesh>
+          <Text
+            position={[0, -0.8, 0]}
+            fontSize={0.3}
+            color="#FDB813"
+            anchorX="center"
+          >
+            SUN
+          </Text>
+
+          {/* Planetary Orbits */}
+          {planets.map((planet, index) => (
+            <group key={planet.name}>
+              {/* Orbital path */}
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[planet.distance * 8 - 0.05, planet.distance * 8 + 0.05, 64]} />
+                <meshBasicMaterial color="#333333" transparent opacity={0.3} />
+              </mesh>
+              
+              {/* Planet */}
+              <mesh position={getPlanetPosition(planet, 0)}>
+                <sphereGeometry args={[planet.size, 16, 16]} />
+                <meshStandardMaterial color={planet.color} />
+              </mesh>
+              
+              {/* Planet label */}
+              <Text
+                position={[getPlanetPosition(planet, 0)[0], getPlanetPosition(planet, 0)[1] + 0.3, getPlanetPosition(planet, 0)[2]]}
+                fontSize={0.15}
+                color={planet.color}
+                anchorX="center"
+              >
+                {planet.name}
+              </Text>
+            </group>
+          ))}
+
+          {/* Asteroid Belt Reference */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[2.2 * 8 - 0.1, 3.2 * 8 + 0.1, 64]} />
+            <meshBasicMaterial color="#8B4513" transparent opacity={0.1} />
+          </mesh>
+          
+          {/* Asteroids */}
+          {asteroids.slice(0, 15).map((asteroid, index) => {
+            const position = getAsteroidPosition(asteroid, index);
+            const size = Math.max(0.05, Math.log(asteroid.estimated_diameter.meters_max + 1) * 0.02);
+            
+            return (
+              <group key={asteroid.id}>
+                <mesh position={position}>
+                  <sphereGeometry args={[size, 8, 8]} />
+                  <meshStandardMaterial 
+                    color={getRiskColor(asteroid.risk_level)}
+                    emissive={getRiskColor(asteroid.risk_level)}
+                    emissiveIntensity={0.2}
+                  />
+                </mesh>
+                
+                <Text
+                  position={[position[0], position[1] + size + 0.2, position[2]]}
+                  fontSize={0.1}
+                  color="white"
+                  anchorX="center"
+                >
+                  {asteroid.name.substring(1, asteroid.name.length-1)}
+                </Text>
+                
+                {/* Orbital trail */}
+                <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[Math.sqrt(position[0]*position[0] + position[2]*position[2]) - 0.02, Math.sqrt(position[0]*position[0] + position[2]*position[2]) + 0.02, 32]} />
+                  <meshBasicMaterial 
+                    color={getRiskColor(asteroid.risk_level)} 
+                    transparent 
+                    opacity={0.2} 
+                  />
+                </mesh>
+              </group>
+            );
+          })}
+
+          {/* Reference Grid */}
+          <gridHelper args={[50, 50, '#333333', '#222222']} />
+          
+          {/* Distance markers */}
+          <Text position={[8, 0, 0]} fontSize={0.2} color="#666666">1 AU</Text>
+          <Text position={[16, 0, 0]} fontSize={0.2} color="#666666">2 AU</Text>
+          <Text position={[24, 0, 0]} fontSize={0.2} color="#666666">3 AU</Text>
+        </Suspense>
+      </Canvas>
+      
+      {/* Legend overlay */}
+      <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white p-3 rounded text-xs">
+        <div className="font-bold mb-2">🌌 Solar System Map</div>
+        <div className="space-y-1">
+          <div><span className="w-3 h-3 bg-yellow-500 inline-block rounded mr-2"></span>Sun & Planets</div>
+          <div><span className="w-3 h-3 bg-red-600 inline-block rounded mr-2"></span>High Risk Asteroids</div>
+          <div><span className="w-3 h-3 bg-green-500 inline-block rounded mr-2"></span>Low Risk Asteroids</div>
+          <div className="text-gray-400 mt-2">Mouse: Rotate • Wheel: Zoom</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // 3D Asteroid Viewer Component
 const AsteroidViewer3D = ({ asteroids }) => {
   const positions = asteroids.map((_, index) => [
