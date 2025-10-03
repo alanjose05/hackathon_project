@@ -10,6 +10,215 @@ import 'leaflet/dist/leaflet.css';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+// Fix for Leaflet default markers
+import L from 'leaflet';
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
+
+// 3D Asteroid Component
+const Asteroid3D = ({ diameter, position, color, name }) => {
+  const meshRef = React.useRef();
+  
+  React.useEffect(() => {
+    if (meshRef.current) {
+      meshRef.current.rotation.x += 0.01;
+      meshRef.current.rotation.y += 0.01;
+    }
+  });
+
+  const radius = Math.max(diameter / 1000, 0.1); // Convert to reasonable 3D size
+  
+  return (
+    <group position={position}>
+      <Sphere
+        ref={meshRef}
+        args={[radius, 32, 32]}
+        position={[0, 0, 0]}
+      >
+        <meshStandardMaterial 
+          color={color}
+          roughness={0.8}
+          metalness={0.2}
+        />
+      </Sphere>
+      <Text
+        position={[0, radius + 0.3, 0]}
+        fontSize={0.2}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+      >
+        {name}
+      </Text>
+      <Text
+        position={[0, -radius - 0.3, 0]}
+        fontSize={0.15}
+        color="gray"
+        anchorX="center"
+        anchorY="middle"
+      >
+        Ø {diameter.toFixed(0)}m
+      </Text>
+    </group>
+  );
+};
+
+// 3D Asteroid Viewer Component
+const AsteroidViewer3D = ({ asteroids }) => {
+  const positions = asteroids.map((_, index) => [
+    (index % 5) * 2 - 4, // X position
+    Math.floor(index / 5) * 2 - 2, // Y position  
+    0 // Z position
+  ]);
+
+  const getRiskColor = (risk) => {
+    switch(risk) {
+      case 'critical': return '#dc2626';
+      case 'high': return '#ea580c';
+      case 'moderate': return '#ca8a04';
+      case 'low': return '#16a34a';
+      default: return '#6b7280';
+    }
+  };
+
+  return (
+    <div className="h-96 bg-black rounded-lg overflow-hidden">
+      <Canvas camera={{ position: [0, 0, 8], fov: 75 }}>
+        <ambientLight intensity={0.5} />
+        <pointLight position={[10, 10, 10]} />
+        <OrbitControls enableZoom={true} />
+        
+        <Suspense fallback={null}>
+          {asteroids.slice(0, 10).map((asteroid, index) => (
+            <Asteroid3D
+              key={asteroid.id}
+              diameter={asteroid.estimated_diameter.meters_max}
+              position={positions[index]}
+              color={getRiskColor(asteroid.risk_level)}
+              name={asteroid.name.substring(1, asteroid.name.length-1)}
+            />
+          ))}
+          
+          {/* Reference objects for size comparison */}
+          <Box position={[-6, 0, 0]} args={[0.1, 0.1, 0.1]}>
+            <meshStandardMaterial color="#60a5fa" />
+          </Box>
+          <Text
+            position={[-6, -0.3, 0]}
+            fontSize={0.12}
+            color="cyan"
+            anchorX="center"
+          >
+            Human (1.8m)
+          </Text>
+          
+          <Box position={[-6, 2, 0]} args={[0.4, 0.4, 0.4]}>
+            <meshStandardMaterial color="#fbbf24" />
+          </Box>
+          <Text
+            position={[-6, 1.4, 0]}
+            fontSize={0.12}
+            color="yellow"
+            anchorX="center"
+          >
+            Building (40m)
+          </Text>
+        </Suspense>
+      </Canvas>
+    </div>
+  );
+};
+
+// Trajectory Map Component
+const TrajectoryMap = ({ asteroids, scenarios }) => {
+  const mapCenter = [40.7128, -74.0060]; // NYC
+
+  const getRiskColor = (risk) => {
+    switch(risk) {
+      case 'critical': return '#dc2626';
+      case 'high': return '#ea580c'; 
+      case 'moderate': return '#ca8a04';
+      case 'low': return '#16a34a';
+      default: return '#6b7280';
+    }
+  };
+
+  return (
+    <div className="h-96 rounded-lg overflow-hidden">
+      <MapContainer 
+        center={mapCenter} 
+        zoom={2} 
+        style={{ height: '100%', width: '100%' }}
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        />
+        
+        {/* Asteroid approach trajectories */}
+        {asteroids.slice(0, 20).map((asteroid, index) => {
+          // Simulate trajectory points around Earth
+          const angle = (index * 18) * (Math.PI / 180); // 18 degrees apart
+          const distance = 40; // Distance from center
+          const lat = mapCenter[0] + Math.sin(angle) * distance;
+          const lng = mapCenter[1] + Math.cos(angle) * distance;
+          
+          return (
+            <Marker key={asteroid.id} position={[lat, lng]}>
+              <Popup>
+                <div>
+                  <strong>{asteroid.name}</strong><br/>
+                  Risk: <span style={{ color: getRiskColor(asteroid.risk_level) }}>
+                    {asteroid.risk_level.toUpperCase()}
+                  </span><br/>
+                  Diameter: {asteroid.estimated_diameter.meters_max.toFixed(0)}m<br/>
+                  {asteroid.close_approach_data[0] && (
+                    <>
+                      Approach: {asteroid.close_approach_data[0].close_approach_date}<br/>
+                      Distance: {(parseFloat(asteroid.close_approach_data[0].miss_distance.kilometers) / 1000).toFixed(0)}K km
+                    </>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+        
+        {/* Impact scenarios */}
+        {scenarios.map((scenario) => (
+          <React.Fragment key={scenario.id}>
+            <Marker position={[scenario.impact_location.lat, scenario.impact_location.lng]}>
+              <Popup>
+                <div className="text-red-800">
+                  <strong>💥 Impact Scenario</strong><br/>
+                  Asteroid: {scenario.asteroid_id}<br/>
+                  Damage Radius: {scenario.estimated_damage_radius_km.toFixed(1)} km<br/>
+                  Energy: {scenario.impact_energy_megatons.toFixed(1)} MT<br/>
+                  Est. Casualties: {scenario.estimated_casualties.toLocaleString()}
+                </div>
+              </Popup>
+            </Marker>
+            <Circle
+              center={[scenario.impact_location.lat, scenario.impact_location.lng]}
+              radius={scenario.estimated_damage_radius_km * 1000} // Convert km to meters
+              pathOptions={{ 
+                color: '#dc2626', 
+                fillColor: '#fee2e2', 
+                fillOpacity: 0.3,
+                weight: 2
+              }}
+            />
+          </React.Fragment>
+        ))}
+      </MapContainer>
+    </div>
+  );
+};
+
 const RiskBadge = ({ risk }) => {
   const getRiskColor = (risk) => {
     switch(risk) {
