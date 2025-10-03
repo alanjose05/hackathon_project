@@ -332,6 +332,56 @@ const Dashboard = () => {
           </select>
         </div>
 
+        {/* Impact Scenarios Section */}
+        {scenarios.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">🎯 Impact Scenarios</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {scenarios.map((scenario) => (
+                <div key={scenario.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="font-semibold text-red-800">Impact Scenario</h3>
+                    <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                      {new Date(scenario.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Asteroid:</span>
+                      <span className="font-medium text-red-700">{scenario.asteroid_id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Location:</span>
+                      <span className="font-medium">
+                        {scenario.impact_location.lat.toFixed(2)}, {scenario.impact_location.lng.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Damage Radius:</span>
+                      <span className="font-medium text-red-700">{scenario.estimated_damage_radius_km.toFixed(1)} km</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Impact Energy:</span>
+                      <span className="font-medium text-red-700">{scenario.impact_energy_megatons.toFixed(1)} MT</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Est. Casualties:</span>
+                      <span className="font-medium text-red-700">{scenario.estimated_casualties.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-3 pt-3 border-t border-red-200">
+                    <p className="text-xs text-red-600">
+                      💥 Theoretical impact simulation based on asteroid properties
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Asteroids Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {asteroids.map((asteroid) => (
