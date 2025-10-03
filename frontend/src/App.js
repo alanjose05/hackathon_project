@@ -23,13 +23,6 @@ L.Icon.Default.mergeOptions({
 // 3D Asteroid Component
 const Asteroid3D = ({ diameter, position, color, name }) => {
   const meshRef = React.useRef();
-  
-  // Simple rotation animation
-  React.useFrame((state, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.5;
-    }
-  });
 
   const radius = Math.log(diameter + 1) * 0.1; // Logarithmic scale for better visualization
   
