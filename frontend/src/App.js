@@ -546,6 +546,27 @@ const Dashboard = () => {
           </select>
         </div>
 
+        {/* Interactive Visualizations */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">🗺️ Trajectory Map</h2>
+            <p className="text-gray-600 mb-4">
+              Interactive map showing asteroid approach paths and impact scenarios
+            </p>
+            <TrajectoryMap asteroids={asteroids} scenarios={scenarios} />
+          </div>
+          
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">🌍 3D Size Comparison</h2>
+            <p className="text-gray-600 mb-4">
+              3D visualization of asteroid sizes with interactive controls
+            </p>
+            <Suspense fallback={<div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">Loading 3D View...</div>}>
+              <AsteroidViewer3D asteroids={asteroids} />
+            </Suspense>
+          </div>
+        </div>
+
         {/* Impact Scenarios Section */}
         {scenarios.length > 0 && (
           <div className="mb-8">
