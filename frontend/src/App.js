@@ -107,105 +107,59 @@ const SolarSystemMap = ({ asteroids }) => {
 
   return (
     <div className="h-96 bg-black rounded-lg overflow-hidden relative">
-      <Canvas camera={{ position: [15, 10, 15], fov: 75 }}>
-        <ambientLight intensity={0.3} />
-        <pointLight position={[0, 0, 0]} intensity={2} color="#FDB813" />
-        <OrbitControls enableZoom={true} />
+      <Canvas camera={{ position: [20, 15, 20], fov: 60 }}>
+        <ambientLight intensity={0.4} />
+        <pointLight position={[0, 0, 0]} intensity={3} color="#FDB813" />
+        <OrbitControls enableZoom={true} maxDistance={100} />
         
-        <Suspense fallback={null}>
-          {/* Sun */}
-          <mesh ref={sunRef} position={[0, 0, 0]}>
-            <sphereGeometry args={[0.5, 32, 32]} />
-            <meshBasicMaterial color="#FDB813" />
-          </mesh>
-          <Text
-            position={[0, -0.8, 0]}
-            fontSize={0.3}
-            color="#FDB813"
-            anchorX="center"
-          >
-            SUN
-          </Text>
+        {/* Sun - Always visible */}
+        <mesh ref={sunRef} position={[0, 0, 0]}>
+          <sphereGeometry args={[1, 32, 32]} />
+          <meshBasicMaterial color="#FDB813" />
+        </mesh>
 
-          {/* Planetary Orbits */}
-          {planets.map((planet, index) => (
+        {/* Planets - Simplified */}
+        {planets.map((planet, index) => {
+          const pos = getPlanetPosition(planet, 0);
+          return (
             <group key={planet.name}>
-              {/* Orbital path */}
+              {/* Orbital ring */}
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[planet.distance * 8 - 0.05, planet.distance * 8 + 0.05, 64]} />
-                <meshBasicMaterial color="#333333" transparent opacity={0.3} />
+                <ringGeometry args={[planet.distance * 6 - 0.1, planet.distance * 6 + 0.1, 32]} />
+                <meshBasicMaterial color="#444444" transparent opacity={0.5} />
               </mesh>
               
               {/* Planet */}
-              <mesh position={getPlanetPosition(planet, 0)}>
-                <sphereGeometry args={[planet.size, 16, 16]} />
+              <mesh position={[pos[0] * 0.75, pos[1], pos[2] * 0.75]}>
+                <sphereGeometry args={[planet.size * 3, 8, 8]} />
                 <meshStandardMaterial color={planet.color} />
               </mesh>
-              
-              {/* Planet label */}
-              <Text
-                position={[getPlanetPosition(planet, 0)[0], getPlanetPosition(planet, 0)[1] + 0.3, getPlanetPosition(planet, 0)[2]]}
-                fontSize={0.15}
-                color={planet.color}
-                anchorX="center"
-              >
-                {planet.name}
-              </Text>
             </group>
-          ))}
+          );
+        })}
 
-          {/* Asteroid Belt Reference */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[2.2 * 8 - 0.1, 3.2 * 8 + 0.1, 64]} />
-            <meshBasicMaterial color="#8B4513" transparent opacity={0.1} />
-          </mesh>
+        {/* Asteroids - Simplified */}
+        {asteroids.slice(0, 12).map((asteroid, index) => {
+          const position = getAsteroidPosition(asteroid, index);
+          const scaledPos = [position[0] * 0.5, position[1], position[2] * 0.5];
+          const size = Math.max(0.1, Math.log(asteroid.estimated_diameter.meters_max + 1) * 0.05);
           
-          {/* Asteroids */}
-          {asteroids.slice(0, 15).map((asteroid, index) => {
-            const position = getAsteroidPosition(asteroid, index);
-            const size = Math.max(0.05, Math.log(asteroid.estimated_diameter.meters_max + 1) * 0.02);
-            
-            return (
-              <group key={asteroid.id}>
-                <mesh position={position}>
-                  <sphereGeometry args={[size, 8, 8]} />
-                  <meshStandardMaterial 
-                    color={getRiskColor(asteroid.risk_level)}
-                    emissive={getRiskColor(asteroid.risk_level)}
-                    emissiveIntensity={0.2}
-                  />
-                </mesh>
-                
-                <Text
-                  position={[position[0], position[1] + size + 0.2, position[2]]}
-                  fontSize={0.1}
-                  color="white"
-                  anchorX="center"
-                >
-                  {asteroid.name.substring(1, asteroid.name.length-1)}
-                </Text>
-                
-                {/* Orbital trail */}
-                <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                  <ringGeometry args={[Math.sqrt(position[0]*position[0] + position[2]*position[2]) - 0.02, Math.sqrt(position[0]*position[0] + position[2]*position[2]) + 0.02, 32]} />
-                  <meshBasicMaterial 
-                    color={getRiskColor(asteroid.risk_level)} 
-                    transparent 
-                    opacity={0.2} 
-                  />
-                </mesh>
-              </group>
-            );
-          })}
+          return (
+            <group key={asteroid.id}>
+              <mesh position={scaledPos}>
+                <sphereGeometry args={[size, 6, 6]} />
+                <meshStandardMaterial 
+                  color={getRiskColor(asteroid.risk_level)}
+                  emissive={getRiskColor(asteroid.risk_level)}
+                  emissiveIntensity={0.3}
+                />
+              </mesh>
+            </group>
+          );
+        })}
 
-          {/* Reference Grid */}
-          <gridHelper args={[50, 50, '#333333', '#222222']} />
-          
-          {/* Distance markers */}
-          <Text position={[8, 0, 0]} fontSize={0.2} color="#666666">1 AU</Text>
-          <Text position={[16, 0, 0]} fontSize={0.2} color="#666666">2 AU</Text>
-          <Text position={[24, 0, 0]} fontSize={0.2} color="#666666">3 AU</Text>
-        </Suspense>
+        {/* Simple grid */}
+        <gridHelper args={[60, 20, '#333333', '#111111']} />
       </Canvas>
       
       {/* Legend overlay */}
