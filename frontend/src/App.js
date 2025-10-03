@@ -1,6 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import axios from 'axios';
 import './App.css';
+import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Sphere, Text, Box } from '@react-three/drei';
+import * as THREE from 'three';
+import 'leaflet/dist/leaflet.css';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
