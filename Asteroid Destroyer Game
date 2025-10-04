@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Asteroid Deflector — Interactive JS Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: radial-gradient(1200px 800px at 50% 100%, #0b1220, #060912 60%, #04070f); color: #e6eefc; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  .wrap { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: 100vh; }
+  .panel { padding: 16px 16px 20px; background: #0b0f1a; border-right: 1px solid #121a2b; }
+  .panel h1 { font-size: 18px; margin: 0 0 8px; }
+  .panel .sub { font-size: 12px; opacity: .7; margin-bottom: 10px; }
+  .control { margin: 12px 0; }
+  .control label { display: flex; justify-content: space-between; font-size: 12px; opacity: .85; margin-bottom: 4px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  input[type=range] { width: 100%; }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  button { appearance: none; border: 1px solid #2b395a; background: #122041; color: #e6eefc; padding: 10px 12px; border-radius: 10px; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  .toggle { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 13px; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .legend { font-size: 12px; opacity: .75; margin-top: 10px; line-height: 1.4; }
+  .meter { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; opacity: .9; }
+  .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; background:#142243; border:1px solid #31487b; }
+</style>
+</head>
+<body>
+    <style>
+    .center-title{
+        position: fixed;
+        left: 57.5%;
+        top: 11%;                  /* middle of the page */
+        transform: translate(-50%, -50%);
+        color: #fff;
+        font-weight: 700;
+        font-size: clamp(28px, 6vw, 72px);
+        letter-spacing: .02em;
+        text-shadow: 0 6px 24px rgba(0,0,0,.45);
+        margin: 0;
+        z-index: 1000;
+        pointer-events: none;      /* clicks still go to the canvas */
+    }</style>
+
+    <centre><h1 class="center-title">Asteroid Deflector</h1></centre>
+<div class="wrap">
+  <div class="panel">
+    <h1>Asteroid Deflector <span class="pill">Technic Titans Productions</span></h1>
+    <div class="sub">Choose a launch angle & speed. Hit the asteroid and save the world!.</div>
+
+    <div class="control">
+      <label>Angle (right ↔ left) <span class="meter" id="angleVal">90°</span></label>
+      <input id="angle" type="range" min="0" max="360" value="270" step="1"
+             oninput="document.getElementById('angleVal').textContent=this.value+'°'">
+    </div>
+
+    <div class="control">
+      <label>Speed (px/s) <span class="meter" id="speedVal">350</span></label>
+      <input id="speed" type="range" min="80" max="800" value="350" step="10"
+             oninput="document.getElementById('speedVal').textContent=this.value">
+    </div>
+
+    <div class="toggle">
+      <input id="autoHit" type="checkbox" checked>
+      <label for="autoHit">Are You Ready !</label>
+    </div>
+
+    <div class="btns">
+      <button id="launchBtn">Launch Rocket</button>
+      <button id="resetBtn">New Asteroid</button>
+    </div>
+
+
+  </div>
+
+  <canvas id="game"></canvas>
+</div>
+
+<script>
+(() => {
+  // ===== Canvas bootstrap
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  function resize() {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = canvas.clientWidth * dpr;
+    canvas.height = canvas.clientHeight * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  new ResizeObserver(resize).observe(canvas);
+  resize();
+
+  // ===== UI elements
+  const angleEl = document.getElementById('angle');
+  const speedEl = document.getElementById('speed');
+  const autoEl  = document.getElementById('autoHit');
+  const launchBtn = document.getElementById('launchBtn');
+  const resetBtn  = document.getElementById('resetBtn');
+
+  // ===== World / physics
+  const W = () => canvas.clientWidth;
+  const H = () => canvas.clientHeight;
+
+  // Units: pixels, seconds
+  const world = {
+    rocket: null,
+    asteroid: null,
+    launched: false,
+    restitution: 0.9,   // 1 = perfectly elastic
+    G: 0,               // space; no gravity for rocket (simplify)
+    lastTime: 0
+  };
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function spawnAsteroid() {
+    const x = rand(30, W()-30);
+    const y = rand(40, 40);
+    // High speed toward Earth (downwards), slight lateral drift
+    const speed = rand(50, 50);
+    const vx = rand(-10, 10);
+    const vy = speed;
+    const radius = rand(80, 80);
+    const mass = radius*radius*0.1; // proportional to area (simple 2D mass proxy)
+    world.asteroid = { x, y, vx, vy, r: radius, m: mass, hit:false };
+  }
+
+  function resetGame() {
+    world.launched = false;
+    world.rocket = null;
+    spawnAsteroid();
+  }
+
+  // Rocket launcher geometry
+  function launcherPivot() {
+    return { x: W()/2, y: H()-40 };
+  }
+
+  function aimUnitVector(deg) {
+    // deg measured left→right along a semicircle; 90° = straight up
+    const rad = deg * Math.PI/180;
+    // Map: 0° -> left, 90° -> up, 180° -> right
+    const ux = Math.cos(rad - Math.PI);   // shift so 0 points left
+    const uy = Math.sin(rad - Math.PI);
+    // Canvas y grows down; "up" should be negative y: uy is OK (sin), but we invert to aim upward
+    return { x: ux, y: -uy };
+  }
+
+  // Compute speed to guarantee intercept along chosen ray (from R0 along u)
+  // Solves u_perp · (A0 + Va t - R0) = 0  => t = -u_perp·(A0 - R0) / (u_perp·Va)
+  // Then s = [ (A0 - R0)·u + (Va·u) t ] / t
+  function interceptSpeedForRay(R0, u, A0, Va) {
+    const uPerp = { x: -u.y, y: u.x };
+    const A0mR0 = { x: A0.x - R0.x, y: A0.y - R0.y };
+    const num = -(uPerp.x*A0mR0.x + uPerp.y*A0mR0.y);
+    const den =  (uPerp.x*Va.x    + uPerp.y*Va.y   );
+    if (Math.abs(den) < 1e-6) return null; // parallel; can't solve
+    const t = num/den;
+    if (t <= 0) return null;
+    const Au = (A0mR0.x*u.x + A0mR0.y*u.y);
+    const Vau= (Va.x*u.x    + Va.y*u.y   );
+    const s = (Au + Vau*t) / t;
+    if (s <= 0 || !isFinite(s)) return null;
+    return { speed: s, t };
+  }
+
+  // Physics: 2D elastic collision (with restitution) between circles
+  function collideElastic(a, b, e=1.0) {
+    const nx = b.x - a.x;
+    const ny = b.y - a.y;
+    const dist = Math.hypot(nx, ny) || 1e-6;
+    const n = { x: nx/dist, y: ny/dist };
+    const tx = -n.y, ty = n.x; // tangent
+
+    // Decompose velocities
+    const v1n = a.vx*n.x + a.vy*n.y;
+    const v1t = a.vx*tx   + a.vy*ty;
+    const v2n = b.vx*n.x + b.vy*n.y;
+    const v2t = b.vx*tx   + b.vy*ty;
+
+    // 1D elastic with restitution on normal component
+    const m1=a.m, m2=b.m;
+    const v1nP = ( (m1 - e*m2)*v1n + (1+e)*m2*v2n ) / (m1+m2);
+    const v2nP = ( (m2 - e*m1)*v2n + (1+e)*m1*v1n ) / (m1+m2);
+
+    // Convert back to x/y
+    a.vx = v1nP*n.x + v1t*tx;
+    a.vy = v1nP*n.y + v1t*ty;
+    b.vx = v2nP*n.x + v2t*tx;
+    b.vy = v2nP*n.y + v2t*ty;
+  }
+
+  // Create rocket
+  function launchRocket() {
+    const ang = Number(angleEl.value);
+    const base = launcherPivot();
+    const u = aimUnitVector(ang);
+
+    // Auto-hit: compute speed needed to intersect along ray u
+    let speed = Number(speedEl.value);
+    if (autoEl.checked) {
+      const sol = interceptSpeedForRay(
+        base,
+        u,
+        { x: world.asteroid.x, y: world.asteroid.y },
+        { x: world.asteroid.vx, y: world.asteroid.vy }
+      );
+      if (sol) {
+        speed = Math.min(Math.max(sol.speed, 500), 1000); // clamp
+        speedEl.value = Math.round(speed);
+        document.getElementById('speedVal').textContent = Math.round(speed);
+      }
+    }
+
+    world.rocket = {
+      x: base.x + u.x*26, // small offset from pivot
+      y: base.y + u.y*26,
+      vx: u.x * speed,
+      vy: u.y * speed,
+      r: 8,
+      m: 50,
+      life: 12 // seconds until despawn
+    };
+    world.launched = true;
+  }
+
+  // ===== Rendering
+  function drawScene(dt) {
+    const w = W(), h = H();
+    ctx.clearRect(0,0,w,h);
+
+    // Starfield (cheap)
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    for (let i=0;i<60;i++){
+      const x = (i*157 % w);
+      const y = (i*97  % h);
+      ctx.fillStyle = i%7? '#ffffff' : '#ffffff';
+      ctx.fillRect(x, y, 2, 2);
+    }
+    ctx.restore();
+
+        // Earth rim at bottom
+    // Earth — bigger, with land
+    const R  = 420;                 // radius (bigger)
+    const cx = w / 2;               // center x
+    const cy = h + 320;             // center y (below the canvas so horizon curves up)
+
+    // Clip to the visible cap of Earth so land doesn't spill outside the rim
+    ctx.save();
+    ctx.beginPath() ;
+    ctx.arc(cx, cy, R, Math.PI, 2 * Math.PI);
+    ctx.lineTo(w, h + 1000);
+    ctx.lineTo(0, h + 1000);
+    ctx.closePath();
+    ctx.clip();
+
+    // ocean
+    ctx.fillStyle = '#084a6b';
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, Math.PI, 2 * Math.PI);
+    ctx.fill();
+
+    // simple "continents" as ellipses
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = '#2e8b57'; // sea-green land
+    ctx.beginPath(); ctx.ellipse(cx - 160, h - 50, 90, 30, -0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 120, h - 70, 70, 26,  0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx -  10, h - 30,120, 36,  0.05,0, Math.PI * 2); ctx.fill();
+
+    // subtle coastline highlight
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = '#cfead6';
+    ctx.lineWidth = 1.2;
+    const coast = (x,y,rx,ry,rot)=>{ ctx.beginPath(); ctx.ellipse(x,y,rx,ry,rot,0,Math.PI*2); ctx.stroke(); };
+    coast(cx - 160, h - 50,  90, 30, -0.2);
+    coast(cx + 120, h - 70,  70, 26,  0.3);
+    coast(cx -  10, h - 30, 120, 36,  0.05);
+
+    ctx.restore();
+
+
+    // Launcher semi-circular arc
+    const pivot = launcherPivot();
+    ctx.save();
+    ctx.strokeStyle = '#22406e';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(pivot.x, pivot.y, 26, Math.PI, 2*Math.PI);
+    ctx.stroke();
+
+    // Launcher angle arm
+    const ang = Number(angleEl.value);
+    const u = aimUnitVector(ang);
+    ctx.beginPath();
+    ctx.moveTo(pivot.x, pivot.y);
+    ctx.lineTo(pivot.x + u.x*34, pivot.y + u.y*34);
+    ctx.strokeStyle = '#5fb3ff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Pivot dot
+    ctx.fillStyle = '#89b9ff';
+    ctx.beginPath();
+    ctx.arc(pivot.x, pivot.y, 3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    // Asteroid
+    const a = world.asteroid;
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.fillStyle = '#c7a67a';
+    ctx.beginPath(); ctx.arc(0,0,a.r,0,Math.PI*2); ctx.fill();
+    // craters
+    ctx.globalAlpha=.15; ctx.fillStyle='#000';
+    for(let i=0;i<6;i++){
+      const rx = Math.cos(i)*a.r*0.35, ry = Math.sin(i*1.7)*a.r*0.22;
+      ctx.beginPath(); ctx.arc(rx,ry, a.r*0.18, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+
+    // Rocket
+    if (world.rocket) {
+      const r = world.rocket;
+      ctx.save();
+      ctx.translate(r.x, r.y);
+      const theta = Math.atan2(r.vy, r.vx);
+      ctx.rotate(theta);
+      // body
+      ctx.fillStyle = '#cfe7ff';
+      ctx.fillRect(-10,-4, 20,8);
+      ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(16,-5); ctx.lineTo(16,5); ctx.closePath(); ctx.fill();
+      // flame
+      ctx.fillStyle = '#ff843a';
+      ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-16, -3); ctx.lineTo(-16, 3); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    // HUD
+    ctx.save();
+    ctx.fillStyle = '#9fb4e2';
+    ctx.font = '12px ui-monospace, Menlo, Consolas, monospace';
+    ctx.fillText(`Asteroid v=(${a.vx.toFixed(1)}, ${a.vy.toFixed(1)}) px/s`, 10, 18);
+    if (world.rocket) {
+      const r = world.rocket;
+      ctx.fillText(`Rocket v=(${r.vx.toFixed(1)}, ${r.vy.toFixed(1)}) px/s`, 10, 36);
+    }
+    ctx.restore();
+  }
+
+  // ===== Update loop
+  function step(dt) {
+    const a = world.asteroid;
+    // Move asteroid
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+
+    // Wrap asteroid horizontally (keep it on screen)
+    if (a.x < -60) a.x = W()+60;
+    if (a.x > W()+60) a.x = -60;
+
+    // Move rocket
+    if (world.rocket) {
+      const r = world.rocket;
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+      r.life -= dt;
+      if (r.life <= 0) world.rocket = null;
+    }
+
+    // Collision rocket↔asteroid
+    if (world.rocket) {
+      const r = world.rocket;
+      const dx = a.x - r.x, dy = a.y - r.y;
+      const d2 = dx*dx + dy*dy;
+      const rad = a.r + r.r;
+      if (d2 <= rad*rad) {
+        // Separate a tiny bit to avoid interpenetration
+        const d = Math.sqrt(d2) || rad;
+        const nx = dx/(d||1), ny = dy/(d||1);
+        const overlap = rad - d + 0.1;
+        a.x += nx*overlap*0.6; a.y += ny*overlap*0.6;
+        r.x -= nx*overlap*0.4; r.y -= ny*overlap*0.4;
+
+        collideElastic(r, a, world.restitution);
+        world.asteroid.hit = true;
+        // Optionally, reduce rocket life post-impact
+        r.life = Math.min(r.life, 2.0);
+      }
+    }
+
+    // If asteroid exits bottom (Earth), respawn a new one
+    if (a.y - a.r > H()+80) {
+      spawnAsteroid();
+    }
+  }
+
+  function loop(ts) {
+    if (!world.lastTime) world.lastTime = ts;
+    const dt = Math.min(0.033, (ts - world.lastTime)/1000);
+    world.lastTime = ts;
+
+    step(dt);
+    drawScene(dt);
+    requestAnimationFrame(loop);
+  }
+
+  // ===== Wire UI
+  launchBtn.addEventListener('click', () => {
+    if (!world.launched) {
+      launchRocket();
+    } else {
+      // allow relaunches
+      launchRocket();
+    }
+  });
+  resetBtn.addEventListener('click', () => {
+    resetGame();
+  });
+
+  // Start
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
