@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Asteroid Impact Simulator — NASA Space Apps</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { margin: 0; display: flex; height: 100vh; background:#0b0b0b; color:#eee; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    #controls { width: 340px; padding: 16px; background: #111; border-right: 1px solid #222; overflow-y: auto; }
+    #controls h2 { margin: 0 0 8px; font-size: 20px; }
+    #controls label { display: block; margin: 12px 0 6px; font-size: 13px; color:#cfd2d6;}
+    #controls input, #controls select, #controls button { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2a2a; background:#0f0f0f; color:#eee; }
+    #controls button { background:#2563eb; border: none; margin-top: 12px; cursor: pointer; }
+    #controls button:hover { filter: brightness(1.1); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    #output { margin-top: 16px; font-size: 14px; line-height: 1.5; }
+    #edu { margin-top: 10px; font-size: 13px; }
+    #map { flex: 1; }
+    .hint { font-size:12px; opacity:.7; margin-top:8px; }
+    .hr { height:1px; background:#222; margin:12px 0; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:9999px; background:#1f2937; font-size:12px; margin-left:6px; }
+  </style>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+
+  <div id="controls">
+    <h2>Asteroid Impact <span class="badge">Technic Titans Productions</span></h2>
+
+    <!-- NASA NEO loader -->
+    <div class="row" style="align-items:end;">
+      <div>
+        <label for="loadNeos">NASA NEOs (7 days)</label>
+        <button id="loadNeos" type="button">Load NEOs</button>
+      </div>
+      <div>
+        <label for="neoSelect">Pick NEO</label>
+        <select id="neoSelect">
+          <option value="">— choose an object —</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <!-- Inputs -->
+    <label for="diameter">Diameter (m)</label>
+    <div style="display:flex; gap:8px; align-items:center;">
+  <input
+  type="range"
+  id="diameter"
+  value="100"
+  min="1"
+  max="10000"
+  step="1"
+  style="flex:1;"
+  oninput="document.getElementById('diameterLabel').textContent = (this.value >= 1000 ? (this.value/1000).toFixed(1) + ' km' : this.value + ' m');"
+/>
+<span id="diameterLabel">100 m</span>
+    </div>
+<label for="velocity">Velocity (km/s)</label>
+<div style="display:flex; gap:8px; align-items:center;">
+  <input
+    type="range"
+    id="velocity"
+    value="20"
+    min="0"
+    max="80"
+        step="0.1"
+        style="flex:1;"
+    oninput="document.getElementById('velocityLabel').textContent = Number(this.value).toFixed(1) + ' km/s';"
+  />
+  <span id="velocityLabel">20.0 km/s</span>
+</div>
+    <label for="density">Density (kg/m³)</label>
+    <div style="display:flex; gap:8px; align-items:center;">
+        <input
+        type="range"
+        id="density"
+        value="3000"
+        min="200"
+        max="8000"
+        step="10"
+        style="flex:1;"
+        oninput="setDensity(this.value)"
+    />
+    <span id="densityLabel">3,000 kg/m³</span>
+    </div>
+
+    <script>
+    const DEFAULT_DENSITY = 3000;  /* add this near your other config */
+
+    function setDensity(val){
+        const el  = document.getElementById('density');
+        const lbl = document.getElementById('densityLabel');
+        const v = Math.max(200, Math.round(Number(val) || DEFAULT_DENSITY)); // use default
+        el.value = v;
+        lbl.textContent = v.toLocaleString() + ' kg/m³';
+    }
+    </script>
+
+    <button id="launch" type="button">Launch Asteroid</button>
+
+    <div class="hint">Tip: click anywhere on the map to set the impact location.</div>
+
+    <div id="output"></div>
+    <div id="edu"></div>
+
+    <div class="hr"></div>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Leaflet -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <script>
+    /* ------------ Config ------------ */
+    // Your NASA API key (as requested)
+    const NASA_KEY = "JSIqBJ8jLmBgQD2eyLbC3PoVw9DEVUAHSpNbYlXd";
+
+    /* ------------ Map ------------ */
+    const map = L.map('map').setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let impactMarker = null;
+    let selectedImpact = null;
+    let meteoriteLayer = null;
+
+    // Track last drawn effect rings to clear between runs
+    let effectLayers = [];
+
+    map.on('click', function (e) {
+      if (impactMarker) map.removeLayer(impactMarker);
+      impactMarker = L.marker(e.latlng).addTo(map).bindPopup("Impact site").openPopup();
+      selectedImpact = e.latlng;
+    });
+
+    /* ------------ Physics (simplified) ------------ */
+    function computeImpact(diameter_m, velocity_km_s, density = 3000) {
+      const v = velocity_km_s * 1000; // m/s
+      const r = diameter_m / 2;
+      const volume = (4 / 3) * Math.PI * Math.pow(r, 3);
+      const mass = volume * density;
+      const energyJ = 0.5 * mass * v * v;
+      const energyMt = energyJ / 4.184e15; // Megaton TNT
+
+      // crude scaling placeholders
+      const craterDiameter_m = diameter_m * 20;
+      const damageRadius_m = craterDiameter_m * 5;
+      return { mass, energyJ, energyMt, craterDiameter_m, damageRadius_m };
+    }
+
+    function torinoFromEnergyMt(mt) {
+      if (mt < 0.01) return { score: 0, text: "No likely hazard" };
+      if (mt < 0.1) return { score: 1, text: "Normal – monitored" };
+      if (mt < 1) return { score: 2, text: "Merits attention" };
+      if (mt < 3) return { score: 3, text: "Close approach – watch" };
+      if (mt < 10) return { score: 4, text: "Threat assessment needed" };
+      if (mt < 30) return { score: 5, text: "Significant threat – study" };
+      if (mt < 100) return { score: 7, text: "Very threatening region" };
+      if (mt < 300) return { score: 8, text: "Certain collisions – devastating" };
+      if (mt < 1000) return { score: 9, text: "Regional catastrophe" };
+      return { score: 10, text: "Global catastrophe" };
+    }
+
+    /* ------------ UI actions ------------ */
+    document.getElementById("launch").onclick = () => {
+      if (!selectedImpact) {
+        alert("Click on the map to set an impact location!");
+        return;
+      }
+      const diameter = parseFloat(document.getElementById("diameter").value);
+      const velocity = parseFloat(document.getElementById("velocity").value);
+      const density = parseFloat(document.getElementById("density").value);
+
+      const result = computeImpact(diameter, velocity, density);
+
+      document.getElementById("output").innerHTML = `
+        <b>Results:</b><br>
+        Mass: ${(result.mass / 1e9).toFixed(2)} Gt<br>
+        Energy: ${result.energyMt.toFixed(2)} Mt TNT<br>
+        Crater: ${(result.craterDiameter_m / 1000).toFixed(1)} km<br>
+        Damage radius: ${(result.damageRadius_m / 1000).toFixed(1)} km
+      `;
+
+      const edu = torinoFromEnergyMt(result.energyMt);
+      document.getElementById("edu").innerHTML = `
+        <b>Torino Scale (educational):</b> ${edu.score}/10 — ${edu.text}
+        <div style="font-size:12px;opacity:0.75">Not an official assessment.</div>
+      `;
+
+      // clear previous effects
+      effectLayers.forEach(l => map.removeLayer(l));
+      effectLayers = [];
+
+      // draw new
+      const crater = L.circle(selectedImpact, {
+        radius: result.craterDiameter_m / 2,
+        color: "red",
+        fill: true,
+        fillOpacity: 0.5
+      }).addTo(map);
+      const dmg = L.circle(selectedImpact, {
+        radius: result.damageRadius_m,
+        color: "orange",
+        fill: false
+      }).addTo(map);
+      effectLayers.push(crater, dmg);
+    };
+
+    /* ------------ NASA NEOs (real data via your API key) ------------ */
+    async function loadNeos() {
+      const btn = document.getElementById('loadNeos');
+      const select = document.getElementById('neoSelect');
+
+      try {
+        btn.disabled = true;
+        select.innerHTML = `<option>Loading…</option>`;
+
+        const today = new Date();
+        const start = today.toISOString().slice(0,10);
+        const end = new Date(today.getTime() + 6*86400000).toISOString().slice(0,10);
+
+        // Use the NASA_KEY variable correctly
+        const url = `https://api.nasa.gov/neo/rest/v1/feed?start_date=${start}&end_date=${end}&api_key=${encodeURIComponent(NASA_KEY)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`NASA API error ${res.status}: ${text}`);
+        }
+        const data = await res.json();
+
+        const all = [];
+        for (const day in (data.near_earth_objects || {})) {
+          for (const obj of data.near_earth_objects[day] || []) {
+            const dmin = obj?.estimated_diameter?.meters?.estimated_diameter_min;
+            const dmax = obj?.estimated_diameter?.meters?.estimated_diameter_max;
+            const est_d = Math.round(((Number(dmin)||0) + (Number(dmax)||0)) / 2);
+
+            const cad0 = obj?.close_approach_data?.[0];
+            const v_km_s = cad0 ? parseFloat(cad0?.relative_velocity?.kilometers_per_second) : NaN;
+            const miss_km = cad0 ? parseFloat(cad0?.miss_distance?.kilometers) : Infinity;
+            const dateStr = cad0?.close_approach_date_full || cad0?.close_approach_date || "";
+
+            all.push({
+              id: obj.id,
+              name: obj.name,
+              diameter_m: est_d,
+              velocity_km_s: v_km_s,
+              pha: !!obj.is_potentially_hazardous_asteroid,
+              miss_km,
+              dateStr
+            });
+          }
+        }
+
+        // Sort by closest approach distance
+        all.sort((a,b)=> (a.miss_km - b.miss_km));
+
+        select.innerHTML = `<option value="">— choose an object —</option>`;
+        for (const o of all) {
+          const opt = document.createElement('option');
+          const vLabel = Number.isFinite(o.velocity_km_s) ? o.velocity_km_s.toFixed(1) : '?';
+          const missStr = Number.isFinite(o.miss_km) ? `${Math.round(o.miss_km).toLocaleString()} km` : '?';
+          const phaStr = o.pha ? " • PHA" : "";
+          opt.value = JSON.stringify(o);
+          opt.textContent = `${o.name} • ~${o.diameter_m||'?'} m • ${vLabel} km/s • miss ${missStr} • ${o.dateStr}${phaStr}`;
+          select.appendChild(opt);
+        }
+
+      } catch (err) {
+        console.error(err);
+        alert('NeoWs request failed. Check your API key, network, or rate limits.');
+        document.getElementById('neoSelect').innerHTML = `<option value="">(load failed)</option>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById("loadNeos").onclick = loadNeos;
+
+    document.getElementById("neoSelect").onchange = (e) => {
+        if (!e.target.value) return;
+        const o = JSON.parse(e.target.value);
+
+
+  // Update DIAMETER slider + label (if you’re using a slider for diameter)
+        const dia = document.getElementById('diameter');
+        if (dia) {
+            dia.value = Math.round(o.diameter_m || 100);
+            dia.dispatchEvent(new Event('input')); // updates the diameterLabel via your oninput
+        }
+
+  // ✅ Update VELOCITY slider + label
+        const vel = document.getElementById('velocity');
+        if (vel) {
+            vel.value = Number(o.velocity_km_s || 20);
+            vel.dispatchEvent(new Event('input')); // updates the velocityLabel via your oninput
+        }
+    
+        const den = document.getElementById('density');
+        if (den && typeof setDensity === 'function') {
+        setDensity(DEFAULT_DENSITY); // e.g., 3000
+        }
+    };
+    
+
+    /* ------------ Meteorite Landings overlay (optional) ------------ */
+    async function toggleMeteorites(show) {
+      if (meteoriteLayer) { map.removeLayer(meteoriteLayer); meteoriteLayer = null; }
+      if (!show) return;
+
+      const url = "https://data.nasa.gov/resource/y77d-th95.json?$select=name,year,recclass,mass,geolocation&$limit=2000";
+      const res = await fetch(url);
+      if (!res.ok) {
+        alert("Failed to load Meteorite Landings.");
+        return;
+      }
+      const rows = await res.json();
+
+      meteoriteLayer = L.layerGroup();
+      rows.forEach(r => {
+        if (!r.geolocation) return;
+        const lat = Number(r.geolocation.latitude);
+        const lon = Number(r.geolocation.longitude);
+        const m = L.circleMarker([lat, lon], { radius: 4, opacity: 0.9 });
+        const mass = r.mass ? `${(Number(r.mass) / 1000).toFixed(1)} kg` : "n/a";
+        const yr = r.year ? new Date(r.year).getFullYear() : "—";
+        m.bindPopup(`<b>${r.name || "Unknown"}</b><br>Class: ${r.recclass || "—"}<br>Mass: ${mass}<br>Year: ${yr}`);
+        meteoriteLayer.addLayer(m);
+      });
+      meteoriteLayer.addTo(map);
+    }
+
+    document.getElementById("showMeteorites").onchange = (e) => toggleMeteorites(e.target.checked);
+
+    /* ------------ Attribution ------------ */
+    L.control.attribution({ position: "bottomright" }).addTo(map);
+    map.attributionControl.addAttribution(
+      'Impact sim • Data: <a href="https://api.nasa.gov/" target="_blank" rel="noreferrer">NASA NeoWs</a>, <a href="https://data.nasa.gov/dataset/meteorite-landings" target="_blank" rel="noreferrer">Meteorite Landings</a>'
+    );
+  </script>
+</body>
+</html>
