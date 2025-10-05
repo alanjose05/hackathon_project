@@ -177,7 +177,7 @@
       if(!selectedImpact) return alert("Click on the map to set impact location!");
       const d=+diameter.value, v=+velocity.value, rho=+density.value;
       const res=computeImpact(d,v,rho);
-      output.innerHTML=`Mass: ${(res.mass/1e9).toFixed(2)} Gt<br>Energy: ${res.energyMt.toFixed(2)} Mt TNT<br>Crater Diameter: ${(res.crater_d/1000).toFixed(1)} km<br>Crater Depth: ${(res.crater_depth/1000).toFixed(1)} km<br> Damage radius: ${(res.dmg/1000).toFixed(1)} km`;
+      output.innerHTML=`Mass: ${(res.mass/1e9).toFixed(2)} Gt<br>Energy: ${res.energyMt.toFixed(2)} Mt TNT<br>Crater Diameter: ${(res.crater_d/1000).toFixed(1)} km<br>Crater Depth: ${(res.crater_depth/1000).toFixed(1)} km<br> Damage Diameter: ${(res.dmg/1000).toFixed(1)} km`;
 
       effectLayers.forEach(l=>map.removeLayer(l)); effectLayers=[];
 
