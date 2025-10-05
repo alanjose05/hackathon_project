@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Asteroid Impact Simulator — NASA Space Apps</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body { margin:0; display:flex; height:100vh; background:#0b0b0b; color:#eee; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    #controls { width:340px; padding:16px; background:#111; border-right:1px solid #222; overflow-y:auto; }
+    #controls h2 { margin:0 0 8px; font-size:20px; }
+    #controls label { display:block; margin:12px 0 6px; font-size:13px; color:#cfd2d6; }
+    #controls input, #controls select, #controls button { width:100%; padding:8px 10px; border-radius:8px; border:1px solid #2a2a2a; background:#0f0f0f; color:#eee; }
+    #controls button { background:#2563eb; border:none; margin-top:12px; cursor:pointer; }
+    #controls button:hover { filter:brightness(1.1); }
+    #map { flex:1; }
+    .hr { height:1px; background:#222; margin:12px 0; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .hint { font-size:12px; opacity:.7; margin-top:8px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:9999px; background:#1f2937; font-size:12px; margin-left:6px; }
+
+  </style>
+</head>
+<body>
+
+  <div id="controls">
+    <h2>Asteroid Impact <span class="badge">Technic Titans</span></h2>
+
+    <!-- NASA NEO loader -->
+    <div class="row" style="align-items:end;">
+      <div>
+        <label for="loadNeos">NASA NEOs (7 days)</label>
+        <button id="loadNeos" type="button">Load NEOs</button>
+      </div>
+      <div>
+        <label for="neoSelect">Pick NEO</label>
+        <select id="neoSelect">
+          <option value="">— choose an object —</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+    <label for="diameter">Diameter (m)</label>
+    <div style="display:flex; gap:8px; align-items:center;">
+
+    <input type="range" id="diameter" value="100" min="1" max="10000" oninput="document.getElementById('diameterLabel').textContent=(this.value>=1000?(this.value/1000).toFixed(1)+' km':this.value+' m');">
+          <span id="diameterLabel">100 m</span></div>
+
+    <label for="velocity">Velocity (km/s)</label>
+    <div style="display:flex; gap:8px; align-items:center;">
+
+    <input type="range" id="velocity" value="20" min="0" max="80" step="0.1" oninput="document.getElementById('velocityLabel').textContent=this.value+' km/s';">
+    <span id="velocityLabel">20 km/s</span></div>
+
+        <label for="density">Density (kg/m³)</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+
+    <input type="range" id="density" value="3000" min="200" max="8000" step="10" oninput="document.getElementById('densityLabel').textContent=this.value+' kg/m³';">
+    <span id="densityLabel">3000 kg/m³</span></div>
+
+    <button id="launch">Launch Asteroid</button>
+    <button id="modeToggle">Mode: Impact Radius</button>
+
+    <div class="hint">Click anywhere on the map to set the impact site.</div>
+    <div id="output"></div>
+    <div id="edu"></div>
+  </div>
+
+  <div id="map">
+  <div id="legend">
+    <div id="legend-scale"></div>
+    <div id="legend-labels" style="color:#000000">
+      <span>0</span>
+      <span>2</span>
+      <span>4</span>
+      <span>6</span>
+      <span>8+</span>
+    </div>
+    <div id="legend-title" style="color:#000000; font-weight:bold;">Shockwave Intensity (M<sub>eff</sub>)</div>
+  </div>
+</div>
+
+  <style>
+    #legend {
+    display: none; /* initially hidden */
+    position: fixed;
+    bottom: 20px;
+    left: 60%;
+    transform: translateX(-50%);
+    width: 60%;
+    text-align: center;
+    font-family: sans-serif;
+    color: white;
+    z-index: 9999;
+  }
+
+  #legend-scale {
+    height: 15px;
+    border-radius: 8px;
+    background: linear-gradient(to right,
+      #00ff00 0%,
+      #ffff00 25%,
+      #ffaa00 50%,
+      #ff6600 75%,
+      #ff0000 100%);
+  }
+
+  #legend-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 14px;
+  }
+
+  #legend-title {
+    font-size: 14px;
+    margin-top: 4px;
+    color: #ddd;
+  }
+  </style>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    /* ------------ Config ------------ */
+    // Your NASA API key (as requested)
+    const NASA_KEY = "JSIqBJ8jLmBgQD2eyLbC3PoVw9DEVUAHSpNbYlXd";
+
+    const R_E = 6371; // Earth radius (km)
+    const rho_earth = 2700 // kg/m^3 density of earth
+    const g_earth = 9.81 // m/s^2 acceleration due to gravity
+    let mode = "radius"; // "radius" or "shockwave"
+
+    const map = L.map('map').setView([20,0],2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+
+    let selectedImpact = null, impactMarker = null, effectLayers = [];
+
+    map.on('click', e => {
+      if (impactMarker) map.removeLayer(impactMarker);
+      impactMarker = L.marker(e.latlng).addTo(map).bindPopup("Impact site").openPopup();
+      selectedImpact = e.latlng;
+    });
+
+    function computeImpact(d, v, rho){
+      const vel = v*1000, r=d/2, vol=(4/3)*Math.PI*r**3, m=vol*rho, E=0.5*m*vel*vel;
+      const crater= 1.161*Math.pow((rho/rho_earth),(1/3))*Math.pow(d,0.78)*Math.pow(vel,0.44)*Math.pow(g_earth,-0.22)*Math.pow(Math.sin(Math.PI/4),(1/3));
+      const crater_depth = crater/(2*(Math.sqrt(2)));
+      dmg = crater*5;
+      return {mass:m, energyJ:E, energyMt:E/4.184e15, crater_d:crater*1.25, crater_depth, dmg};
+    }
+
+      function torinoFromEnergyMt(mt) {
+      if (mt < 0.01) return { score: 0, text: "No likely hazard" };
+      if (mt < 0.1) return { score: 1, text: "Normal – monitored" };
+      if (mt < 1) return { score: 2, text: "Merits attention" };
+      if (mt < 3) return { score: 3, text: "Close approach – watch" };
+      if (mt < 10) return { score: 4, text: "Threat assessment needed" };
+      if (mt < 30) return { score: 5, text: "Significant threat – study" };
+      if (mt < 100) return { score: 7, text: "Very threatening region" };
+      if (mt < 300) return { score: 8, text: "Certain collisions – devastating" };
+      if (mt < 1000) return { score: 9, text: "Regional catastrophe" };
+      return { score: 10, text: "Global catastrophe" };
+    }
+
+    function Meff(r, energy){
+      M_s = 0.67*Math.log10(energy) - 5.87
+      if(r<60) return M_s-0.0238*r;
+      else if(r<700) return M_s-0.0048*r-1.1644;
+      else{
+        const delta=r/R_E;
+        return M_s-6.399-1.66*Math.log10(delta);
+      }
+    }
+
+    document.getElementById("launch").onclick=()=>{
+      if(!selectedImpact) return alert("Click on the map to set impact location!");
+      const d=+diameter.value, v=+velocity.value, rho=+density.value;
+      const res=computeImpact(d,v,rho);
+      output.innerHTML=`Mass: ${(res.mass/1e9).toFixed(2)} Gt<br>Energy: ${res.energyMt.toFixed(2)} Mt TNT<br>Crater Diameter: ${(res.crater_d/1000).toFixed(1)} km<br>Crater Depth: ${(res.crater_depth/1000).toFixed(1)} km<br> Damage Diameter: ${(res.dmg/1000).toFixed(1)} km`;
+
+      effectLayers.forEach(l=>map.removeLayer(l)); effectLayers=[];
+
+      if(mode==="radius"){
+        const crater=L.circle(selectedImpact,{radius:res.crater_d/2,color:"red",fill:true,fillOpacity:0.4}).addTo(map);
+        const dmg=L.circle(selectedImpact,{radius:res.dmg,color:"orange"}).addTo(map);
+        effectLayers.push(crater,dmg);
+      } else {
+        // shockwave visualization: circles colored by Meff value
+        for(let r=10;r<=2600;r+=200){
+          const M=Meff(r, res.energyJ);
+          const color=M>8?"#ff0000":M>6?"#ff6600":M>4?"#ffaa00":M>2?"#ffff00":"#00ff00";
+          const c=L.circle(selectedImpact,{radius:r*1000,color,fillOpacity:0.15});
+          c.bindPopup(`M_eff = ${M.toFixed(2)} at ${r} km`);
+          c.addTo(map);
+          effectLayers.push(c);
+        }
+      }
+
+      if (mode === "radius") {
+        document.getElementById("legend").style.display = "none";
+      } else {
+        document.getElementById("legend").style.display = "block";
+}
+
+    };
+
+    document.getElementById("modeToggle").onclick=()=>{
+      mode = (mode==="radius"?"shockwave":"radius");
+      document.getElementById("modeToggle").textContent = mode==="radius"?"Mode: Impact Radius":"Mode: Shockwave Strength";
+      effectLayers.forEach(l=>map.removeLayer(l));
+      effectLayers=[];
+
+    // clear previous effects
+      effectLayers.forEach(l => map.removeLayer(l));
+      effectLayers = [];
+    };
+
+    /* ------------ NASA NEOs (real data via your API key) ------------ */
+    async function loadNeos() {
+      const btn = document.getElementById('loadNeos');
+      const select = document.getElementById('neoSelect');
+
+      try {
+        btn.disabled = true;
+        select.innerHTML = `<option>Loading…</option>`;
+
+        const today = new Date();
+        const start = today.toISOString().slice(0,10);
+        const end = new Date(today.getTime() + 6*86400000).toISOString().slice(0,10);
+
+        // Use the NASA_KEY variable correctly
+        const url = `https://api.nasa.gov/neo/rest/v1/feed?start_date=${start}&end_date=${end}&api_key=${encodeURIComponent(NASA_KEY)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`NASA API error ${res.status}: ${text}`);
+        }
+        const data = await res.json();
+
+        const all = [];
+        for (const day in (data.near_earth_objects || {})) {
+          for (const obj of data.near_earth_objects[day] || []) {
+            const dmin = obj?.estimated_diameter?.meters?.estimated_diameter_min;
+            const dmax = obj?.estimated_diameter?.meters?.estimated_diameter_max;
+            const est_d = Math.round(((Number(dmin)||0) + (Number(dmax)||0)) / 2);
+
+            const cad0 = obj?.close_approach_data?.[0];
+            const v_km_s = cad0 ? parseFloat(cad0?.relative_velocity?.kilometers_per_second) : NaN;
+            const miss_km = cad0 ? parseFloat(cad0?.miss_distance?.kilometers) : Infinity;
+            const dateStr = cad0?.close_approach_date_full || cad0?.close_approach_date || "";
+
+            all.push({
+              id: obj.id,
+              name: obj.name,
+              diameter_m: est_d,
+              velocity_km_s: v_km_s,
+              pha: !!obj.is_potentially_hazardous_asteroid,
+              miss_km,
+              dateStr
+            });
+          }
+        }
+
+        // Sort by closest approach distance
+        all.sort((a,b)=> (a.miss_km - b.miss_km));
+
+        select.innerHTML = `<option value="">— choose an object —</option>`;
+        for (const o of all) {
+          const opt = document.createElement('option');
+          const vLabel = Number.isFinite(o.velocity_km_s) ? o.velocity_km_s.toFixed(1) : '?';
+          const missStr = Number.isFinite(o.miss_km) ? `${Math.round(o.miss_km).toLocaleString()} km` : '?';
+          const phaStr = o.pha ? " • PHA" : "";
+          opt.value = JSON.stringify(o);
+          opt.textContent = `${o.name} • ~${o.diameter_m||'?'} m • ${vLabel} km/s • miss ${missStr} • ${o.dateStr}${phaStr}`;
+          select.appendChild(opt);
+        }
+
+      } catch (err) {
+        console.error(err);
+        alert('NeoWs request failed. Check your API key, network, or rate limits.');
+        document.getElementById('neoSelect').innerHTML = `<option value="">(load failed)</option>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+     document.getElementById("loadNeos").onclick = loadNeos;
+
+    document.getElementById("neoSelect").onchange = (e) => {
+        if (!e.target.value) return;
+        const o = JSON.parse(e.target.value);
+
+
+  // Update DIAMETER slider + label (if you’re using a slider for diameter)
+        const dia = document.getElementById('diameter');
+        if (dia) {
+            dia.value = Math.round(o.diameter_m || 100);
+            dia.dispatchEvent(new Event('input')); // updates the diameterLabel via your oninput
+        }
+
+  // ✅ Update VELOCITY slider + label
+        const vel = document.getElementById('velocity');
+        if (vel) {
+            vel.value = Number(o.velocity_km_s || 20);
+            vel.dispatchEvent(new Event('input')); // updates the velocityLabel via your oninput
+        }
+
+        const den = document.getElementById('density');
+        if (den && typeof setDensity === 'function') {
+        setDensity(DEFAULT_DENSITY); // e.g., 3000
+        }
+    };
+    /* ------------ Meteorite Landings overlay (optional) ------------ */
+    async function toggleMeteorites(show) {
+      if (meteoriteLayer) { map.removeLayer(meteoriteLayer); meteoriteLayer = null; }
+      if (!show) return;
+
+      const url = "https://data.nasa.gov/resource/y77d-th95.json?$select=name,year,recclass,mass,geolocation&$limit=2000";
+      const res = await fetch(url);
+      if (!res.ok) {
+        alert("Failed to load Meteorite Landings.");
+        return;
+      }
+      const rows = await res.json();
+
+      meteoriteLayer = L.layerGroup();
+      rows.forEach(r => {
+        if (!r.geolocation) return;
+        const lat = Number(r.geolocation.latitude);
+        const lon = Number(r.geolocation.longitude);
+        const m = L.circleMarker([lat, lon], { radius: 4, opacity: 0.9 });
+        const mass = r.mass ? `${(Number(r.mass) / 1000).toFixed(1)} kg` : "n/a";
+        const yr = r.year ? new Date(r.year).getFullYear() : "—";
+        m.bindPopup(`<b>${r.name || "Unknown"}</b><br>Class: ${r.recclass || "—"}<br>Mass: ${mass}<br>Year: ${yr}`);
+        meteoriteLayer.addLayer(m);
+      });
+      meteoriteLayer.addTo(map);
+    }
+
+    document.getElementById("showMeteorites").onchange = (e) => toggleMeteorites(e.target.checked);
+
+    /* ------------ Attribution ------------ */
+    L.control.attribution({ position: "bottomright" }).addTo(map);
+    map.attributionControl.addAttribution(
+      'Impact sim • Data: <a href="https://api.nasa.gov/" target="_blank" rel="noreferrer">NASA NeoWs</a>, <a href="https://data.nasa.gov/dataset/meteorite-landings" target="_blank" rel="noreferrer">Meteorite Landings</a>'
+    );
+
+
+  </script>
+
+</body>
+</html>
